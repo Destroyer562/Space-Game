@@ -2,7 +2,7 @@
 Roblox Space Game in Lua
 
 
-!DOCTYPE HTML
+
 
 <html>
 
