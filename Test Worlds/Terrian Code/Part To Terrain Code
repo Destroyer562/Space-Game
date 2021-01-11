@@ -1,1 +1,100 @@
+local rate = .00001
+local RunService = game:GetService("RunService")
+local whitelist = workspace.Mesh:GetChildren()
+local thickness = 25
+local sea_level = .125 --From 0 to 1, where 0 is the lowest elevation of the map and 1 is the highest (gets denormalized in terms of the relative elevations of your map automatically)
+local regionIncrement = 1024
 
+local function TimerWait(duration) --Framerate-dependent function that waits at the theoretically lowest possible step, Heartbeat:Wait(), until some time dt has passed.
+	local start = tick()
+	repeat RunService.Heartbeat:Wait() until tick() - start >= duration
+	return true
+end
+
+local function MinMaxAvg(data)
+	local min, max, average = data[1], data[#data], 0
+	for _, element in pairs(data) do
+		if element < min then
+			min = element
+		end
+		if element > max then
+			max = element
+		end
+		average = average + element
+	end
+	average = average / #data
+
+	return min, max, average
+end
+
+local function Normalize(Min, Max, Val)
+	local Normal = (Val - Min) / (Max - Min)
+	return Normal
+end
+
+local function Denormalize(Min, Max, Val)
+	local Denormal = (Val * (Max - Min)) + Min
+	return Denormal
+end
+
+local function ConvertTerrain()
+	local data = {}
+
+	for _, part in pairs(whitelist) do
+		table.insert(data, part.Position.Y)
+		if tick() % 5 > 4.5 then
+			TimerWait(rate)
+		end
+	end
+
+	local min, max, average = MinMaxAvg(data)
+	local orient, extents = workspace.Mesh:GetBoundingBox()
+	local MeshCenter, MeshSize = workspace.Mesh:GetModelCFrame().p, workspace.Mesh:GetExtentsSize()
+	local LowerBound = Vector3.new(MeshCenter.X - MeshSize.X/2, MeshCenter.Y - MeshSize.Y/2, MeshCenter.Z - MeshSize.Z/2)
+	local UpperBound = Vector3.new(MeshCenter.X + MeshSize.X/2, Denormalize(min, max, sea_level), MeshCenter.Z + MeshSize.Z/2)
+
+
+	--Enable for automatic sea level filling based on sea_level variable (VERY slow, recommend using Roblox's sea level method instead. My version of this functionality isn't complete.
+	--(It's also not guaranteed that it will be aligned with your map. That's why it's off by default.)
+	--[[for x = LowerBound.X, UpperBound.X, regionIncrement do
+		for z = LowerBound.Z, UpperBound.Z, regionIncrement do
+			if tick() % 5 > 4.5 then
+				TimerWait(rate)
+			end
+			for y = LowerBound.Y, UpperBound.Y, regionIncrement do
+				local Lower = Vector3.new(x, y, z)
+				local Upper = Vector3.new(x + regionIncrement, y + regionIncrement, z + regionIncrement)
+				local WaterRegion = Region3.new(Lower, Upper)
+				workspace.Terrain:FillRegion(WaterRegion:ExpandToGrid(4), 4, Enum.Material.Water)
+			end
+		end
+	end]]--
+
+	for _, part in pairs(whitelist) do
+		local Material
+		local cf, pos, size = part.CFrame, part.CFrame.p, Vector3.new(thickness, part.Size.Y + 15, part.Size.Z + 15)
+		if math.abs(90 - math.abs(part.Orientation.Z)) > 35 or math.abs(0 - math.abs(part.Orientation.X)) > 35 then
+			Material = Enum.Material.Rock
+		else
+			Material = Enum.Material.Grass
+		end
+
+		if pos.Y < Denormalize(min, max, sea_level) + 6 then
+			if Material == Enum.Material.Grass then
+				Material = Enum.Material.Sand
+			elseif Material == Enum.Material.Rock then
+				Material = Enum.Material.Slate
+			end
+		end
+
+
+		workspace.Terrain:FillWedge(cf, size, Material)
+
+		part:Destroy()
+		if tick() % 5 > 4.5 then
+			TimerWait(rate)
+		end
+	end
+end
+
+ConvertTerrain()
